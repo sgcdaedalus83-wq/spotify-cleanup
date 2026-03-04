@@ -1,2 +1,2 @@
-# Spotify-Cleanup
+# spotify-cleaner
 Reset
