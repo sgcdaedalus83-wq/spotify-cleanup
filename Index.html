@@ -3,6 +3,112 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Spotify Cleaner Pro</title>
+    <style>
+        :root { --green: #1DB954; --black: #121212; --grey: #282828; }
+        body { font-family: 'Inter', sans-serif; background: var(--black); color: white; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; }
+        .card { background: var(--grey); padding: 2rem; border-radius: 20px; width: 100%; max-width: 400px; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+        .btn { background: var(--green); color: white; border: none; padding: 15px 30px; border-radius: 30px; font-weight: bold; cursor: pointer; width: 100%; font-size: 1rem; margin: 10px 0; }
+        .btn-red { background: #e91429; display: none; }
+        #log { background: #000; padding: 10px; border-radius: 10px; height: 150px; overflow-y: auto; font-size: 12px; text-align: left; margin-top: 20px; color: #aaa; }
+        .progress { height: 6px; background: #444; border-radius: 3px; margin-top: 10px; display: none; }
+        #bar { height: 100%; background: var(--green); width: 0%; transition: 0.3s; }
+    </style>
+</head>
+<body>
+
+<div class="card">
+    <h1>Spotify Reset 🧹</h1>
+    <p>Wyczyść swoją bibliotekę jednym kliknięciem.</p>
+
+    <button id="loginBtn" class="btn" onclick="login()">Zaloguj się do Spotify</button>
+    <button id="cleanBtn" class="btn btn-red" onclick="startCleaning()">WYCZYŚĆ WSZYSTKO</button>
+
+    <div class="progress" id="prog"><div id="bar"></div></div>
+    <div id="log">Czekam na logowanie...</div>
+</div>
+
+<script>
+    // --- KONFIGURACJA ---
+    const CLIENT_ID = '6d393cf1a59a4aa597d1cad60203db74'; 
+    const REDIRECT_URI = window.location.href.split('#')[0]; // Automatycznie bierze adres Twojej strony
+    // --------------------
+
+    const SCOPES = 'user-library-modify user-library-read playlist-modify-private playlist-modify-public user-follow-modify';
+    let token = '';
+
+    // Obsługa powrotu z logowania
+    window.onload = () => {
+        const params = new URLSearchParams(window.location.hash.replace('#', '?'));
+        token = params.get('access_token');
+        if (token) {
+            document.getElementById('loginBtn').style.display = 'none';
+            document.getElementById('cleanBtn').style.display = 'block';
+            document.getElementById('log').innerHTML = '> Zalogowano. Możesz zacząć czyszczenie.';
+            window.history.pushState("", document.title, window.location.pathname);
+        }
+    };
+
+    function login() {
+        const authUrl = `https://accounts.spotify.com/authorize?client_id=${CLIENT_ID}&response_type=token&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&scope=${encodeURIComponent(SCOPES)}`;
+        window.location.href = authUrl;
+    }
+
+    async function call(url, method = 'GET', body = null) {
+        const res = await fetch(`https://api.spotify.com/v1${url}`, {
+            method, headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: body ? JSON.stringify(body) : null
+        });
+        return res.status === 204 ? null : res.json();
+    }
+
+    async function startCleaning() {
+        if (!confirm("Uwaga! Wszystkie Twoje piosenki, albumy i playlisty zostaną usunięte. Kontynuować?")) return;
+        
+        const logger = document.getElementById('log');
+        const bar = document.getElementById('bar');
+        document.getElementById('prog').style.display = 'block';
+        document.getElementById('cleanBtn').disabled = true;
+
+        const jobs = [
+            { name: 'Utwory', url: '/me/tracks', type: 'tracks' },
+            { name: 'Albumy', url: '/me/albums', type: 'albums' },
+            { name: 'Artyści', url: '/me/following?type=artist', type: 'artists' },
+            { name: 'Playlisty', url: '/me/playlists', type: 'playlists' }
+        ];
+
+        for (let i = 0; i < jobs.length; i++) {
+            logger.innerHTML += `<br>> Czyszczę: ${jobs[i].name}...`;
+            let hasMore = true;
+            while (hasMore) {
+                let data = await call(jobs[i].url + (jobs[i].url.includes('?') ? '&' : '?') + 'limit=50');
+                let items = jobs[i].type === 'artists' ? data.artists.items : data.items;
+                
+                if (!items || items.length === 0) { hasMore = false; break; }
+
+                let ids = items.map(item => item.track?.id || item.album?.id || item.id);
+                
+                if (jobs[i].type === 'tracks') await call('/me/tracks', 'DELETE', ids);
+                else if (jobs[i].type === 'albums') await call('/me/albums', 'DELETE', ids);
+                else if (jobs[i].type === 'artists') await call(`/me/following?type=artist&ids=${ids.join(',')}`, 'DELETE');
+                else if (jobs[i].type === 'playlists') {
+                    for(let id of ids) await call(`/playlists/${id}/followers`, 'DELETE');
+                }
+                logger.innerHTML += '.';
+            }
+            bar.style.width = `${((i + 1) / jobs.length) * 100}%`;
+        }
+        logger.innerHTML += '<br><b>> GOTOWE! Konto jest czyste.</b>';
+        alert("Zrobione! Twoja biblioteka jest pusta.");
+    }
+</script>
+</body>
+</html>
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Spotify Reset Tool</title>
     <style>
         :root { --spotify-green: #1DB954; --danger: #e91429; --bg: #121212; --card: #181818; }
